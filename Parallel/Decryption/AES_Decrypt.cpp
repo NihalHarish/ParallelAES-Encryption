@@ -227,36 +227,42 @@ void InvShiftRows()
 	unsigned char temp;
 
 	// Rotate first row 1 columns to right	
-#pragma omp task private(temp)
- {
-	temp=state[1][3];
-	state[1][3]=state[1][2];
-	state[1][2]=state[1][1];
-	state[1][1]=state[1][0];
-	state[1][0]=temp;
-}
-	// Rotate second row 2 columns to right	
-	
-#pragma omp task private(temp)
- {
-   temp=state[2][0];
-	state[2][0]=state[2][2];
-	state[2][2]=temp;
+   #pragma omp parallel private(temp)
+   {
+      #pragma omp sections
+      {
+         #pragma omp task private(temp)
+          {
+            temp=state[1][3];
+            state[1][3]=state[1][2];
+            state[1][2]=state[1][1];
+            state[1][1]=state[1][0];
+            state[1][0]=temp;
+         }
+            // Rotate second row 2 columns to right	
+            
+         #pragma omp task private(temp)
+         {
+            temp=state[2][0];
+            state[2][0]=state[2][2];
+            state[2][2]=temp;
 
-	temp=state[2][1];
-	state[2][1]=state[2][3];
-	state[2][3]=temp;
-}
-	// Rotate third row 3 columns to right
-	
-#pragma omp task private(temp)
- {
-   temp=state[3][0];
-	state[3][0]=state[3][1];
-	state[3][1]=state[3][2];
-	state[3][2]=state[3][3];
-	state[3][3]=temp;
- }
+            temp=state[2][1];
+            state[2][1]=state[2][3];
+            state[2][3]=temp;
+         }
+            // Rotate third row 3 columns to right
+            
+         #pragma omp task private(temp)
+         {
+            temp=state[3][0];
+            state[3][0]=state[3][1];
+            state[3][1]=state[3][2];
+            state[3][2]=state[3][3];
+            state[3][3]=temp;
+          }
+      }
+   }
 }
 
 // xtime is a macro that finds the product of {02} and the argument to xtime modulo {1b}  
