@@ -1,6 +1,6 @@
 /*
    This code is a parallel implementation of the source code available
-   at http://www.csrc.nist.gov/publications/fips/fips197/fips-197.pdf
+   at http://comp.ist.utl.pt/ec-csc/Code/Ciphers/AES_Decrypt.cpp
 */
 
 #include<stdio.h>
