@@ -1,38 +1,16 @@
 /*
-******************************************************************
-**       Advanced Encryption Standard implementation in C.      **
-**       By Niyaz PK                                            **
-**       E-mail: niyazlife@gmail.com                            **
-**       Downloaded from Website: www.hoozi.com                 **
-******************************************************************
-This is the source code for decryption using the latest AES algorithm.
-AES algorithm is also called Rijndael algorithm. AES algorithm is 
-recommended for non-classified use by the National Institute of Standards 
-and Technology(NIST), USA. Now-a-days AES is being used for almost 
-all encryption applications all around the world.
-
-THE MAIN FEATURE OF THIS AES ENCRYPTION PROGRAM IS NOT EFFICIENCY; IT
-IS SIMPLICITY AND READABILITY. THIS SOURCE CODE IS PROVIDED FOR ALL
-TO UNDERSTAND THE AES ALGORITHM.
-
-Comments are provided as needed to understand the program. But the 
-user must read some AES documentation to understand the underlying 
-theory correctly.
-
-It is not possible to describe the complete AES algorithm in detail 
-here. For the complete description of the algorithm, point your 
-browser to:
-http://www.csrc.nist.gov/publications/fips/fips197/fips-197.pdf
-
-Find the Wikipedia page of AES at:
-http://en.wikipedia.org/wiki/Advanced_Encryption_Standard
-******************************************************************
+   This code is a parallel implementation of the source code available
+   at http://www.csrc.nist.gov/publications/fips/fips197/fips-197.pdf
 */
 
-// Include stdio.h for standard input/output.
-// Used for giving output to the screen.
 #include<stdio.h>
 #include<omp.h>
+#include<string.h>
+#define KB 1024
+#define MB 1024*1024
+#define CHUNK_SIZE 256*KB
+#define KEY_LENGTH 128 
+
 // The number of columns comprising a state in AES. This is a constant in AES. Value=4
 #define Nb 4
 
@@ -42,10 +20,6 @@ int Nr=0;
 // The number of 32 bit words in the key. It is simply initiated to zero. The actual value is recieved in the program.
 int Nk=0;
 
-// in - it is the array that holds the CipherText to be decrypted.
-// out - it is the array that holds the output of the for decryption.
-// state - the array that holds the intermediate results during decryption.
-unsigned char in[16], out[16], state[4][4];
 
 // The array that stores the round keys.
 unsigned char RoundKey[240];
@@ -127,7 +101,6 @@ void KeyExpansion()
 	unsigned char temp[4],k;
 	
 	// The first round key is the key itself.
-//#pragma omp parallel for default(shared) private(i)
 	for(i=0;i<Nk;i++)
 	{
 		RoundKey[i*4]=Key[i*4];
@@ -190,10 +163,9 @@ void KeyExpansion()
 
 // This function adds the round key to state.
 // The round key is added to the state by an XOR function.
-void AddRoundKey(int round) 
+void AddRoundKey(int round, unsigned char state[][4]) 
 {
 	int i,j;
-#pragma omp parallel for default(shared) private(i,j)
 	for(i=0;i<4;i++)
 	{
 		for(j=0;j<4;j++)
@@ -205,10 +177,9 @@ void AddRoundKey(int round)
 
 // The SubBytes Function Substitutes the values in the
 // state matrix with values in an S-box.
-void InvSubBytes()
+void InvSubBytes(unsigned char state[][4])
 {
 	int i,j;
-#pragma omp parallel for default(shared) private(i,j)
 	for(i=0;i<4;i++)
 	{
 		for(j=0;j<4;j++)
@@ -222,27 +193,18 @@ void InvSubBytes()
 // The ShiftRows() function shifts the rows in the state to the left.
 // Each row is shifted with different offset.
 // Offset = Row number. So the first row is not shifted.
-void InvShiftRows()
+void InvShiftRows(unsigned char state[][4])
 {
 	unsigned char temp;
 
 	// Rotate first row 1 columns to right	
-   #pragma omp parallel private(temp)
-   {
-      #pragma omp sections
-      {
-         #pragma omp task private(temp)
-          {
             temp=state[1][3];
             state[1][3]=state[1][2];
             state[1][2]=state[1][1];
             state[1][1]=state[1][0];
             state[1][0]=temp;
-         }
             // Rotate second row 2 columns to right	
             
-         #pragma omp task private(temp)
-         {
             temp=state[2][0];
             state[2][0]=state[2][2];
             state[2][2]=temp;
@@ -250,19 +212,13 @@ void InvShiftRows()
             temp=state[2][1];
             state[2][1]=state[2][3];
             state[2][3]=temp;
-         }
             // Rotate third row 3 columns to right
             
-         #pragma omp task private(temp)
-         {
             temp=state[3][0];
             state[3][0]=state[3][1];
             state[3][1]=state[3][2];
             state[3][2]=state[3][3];
             state[3][3]=temp;
-          }
-      }
-   }
 }
 
 // xtime is a macro that finds the product of {02} and the argument to xtime modulo {1b}  
@@ -274,11 +230,10 @@ void InvShiftRows()
 // MixColumns function mixes the columns of the state matrix.
 // The method used to multiply may be difficult to understand for the inexperienced.
 // Please use the references to gain more information.
-void InvMixColumns()
+void InvMixColumns(unsigned char state[][4])
 {
 	int i;
 	unsigned char a,b,c,d;
-//#pragma omp parallel for default(shared) private(i,a,b,c,d)
 	for(i=0;i<4;i++)
 	{	
 	
@@ -296,12 +251,11 @@ void InvMixColumns()
 }
 
 // InvCipher is the main function that decrypts the CipherText.
-void InvCipher()
+void InvCipher(unsigned char *in, unsigned char *out)
 {
 	int i,j,round=0;
-
+	unsigned char state[4][4];
 	//Copy the input CipherText to state array.
-#pragma omp parallel for default(shared) private(i,j)
 	for(i=0;i<4;i++)
 	{
 		for(j=0;j<4;j++)
@@ -311,24 +265,24 @@ void InvCipher()
 	}
 
 	// Add the First round key to the state before starting the rounds.
-	AddRoundKey(Nr); 
+	AddRoundKey(Nr, state); 
 
 	// There will be Nr rounds.
 	// The first Nr-1 rounds are identical.
 	// These Nr-1 rounds are executed in the loop below.
 	for(round=Nr-1;round>0;round--)
 	{
-		InvShiftRows();
-		InvSubBytes();
-		AddRoundKey(round);
-		InvMixColumns();
+		InvShiftRows(state);
+		InvSubBytes(state);
+		AddRoundKey(round, state);
+		InvMixColumns(state);
 	}
 	
 	// The last round is given below.
 	// The MixColumns function is not here in the last round.
-	InvShiftRows();
-	InvSubBytes();
-	AddRoundKey(0);
+	InvShiftRows(state);
+	InvSubBytes(state);
+	AddRoundKey(0, state);
 
 	// The decryption process is over.
 	// Copy the state array to output array.
@@ -340,7 +294,7 @@ void InvCipher()
 		}
 	}
 }
-int main()
+int main(int argc, char* argv[])
 {
 	int i;
 
@@ -362,54 +316,40 @@ int main()
 	// The array temp stores the key.
 	// The array temp2 stores the plaintext.
 	unsigned char temp[32] = {0x00  ,0x01  ,0x02  ,0x03  ,0x04  ,0x05  ,0x06  ,0x07  ,0x08  ,0x09  ,0x0a  ,0x0b  ,0x0c  ,0x0d  ,0x0e  ,0x0f};
-	unsigned char temp2[32]= {0x69  ,0xc4  ,0xe0  ,0xd8  ,0x6a  ,0x7b  ,0x04  ,0x30  ,0xd8  ,0xcd  ,0xb7  ,0x80  ,0x70  ,0xb4  ,0xc5  ,0x5a};
 	
 	// Copy the Key and CipherText
 	for(i=0;i<Nk*4;i++)
-	{
 		Key[i]=temp[i];
-		in[i]=temp2[i];
-	}
 
 //	       *********************************************************
 
+//FILE READ AND WRITE FOLLOWS
 
+   FILE *fp_input = fopen(argv[1], "rb");
+   FILE *fp_output = fopen(argv[2], "ab");
+   unsigned char source[CHUNK_SIZE];
+   char chunk_input[CHUNK_SIZE];
+   char chunk_output[CHUNK_SIZE];
 
+   //The Key-Expansion routine must be called before the decryption routine.
+   KeyExpansion();
 
-// Uncomment Part 2 if you need to read Key and CipherText from the keyboard.
-// 	Part 2: ********************************************************
-/*
-	//Clear the input buffer
-	flushall();
-
-	//Recieve the Key from the user
-	printf("Enter the Key in hexadecimal: ");
-	for(i=0;i<Nk*4;i++)
-	{
-		scanf("%x",&Key[i]);
-	}
-
-	printf("Enter the CipherText in hexadecimal: ");
-	for(i=0;i<Nb*4;i++)
-	{
-		scanf("%x",&in[i]);
-	}
-*/
-// 	        ********************************************************
-
-
-	//The Key-Expansion routine must be called before the decryption routine.
-	KeyExpansion();
-
-	// The next function call decrypts the CipherText with the Key using AES algorithm.
-	InvCipher();
-
-	// Output the decrypted text.
-	printf("\nText after decryption:\n");
-	for(i=0;i<Nb*4;i++)
-	{
-		printf("%02x ",out[i]);
-	}
-	printf("\n\n");
-
+   while(fread(chunk_input, sizeof(chunk_input), 1, fp_input) == 1){ 
+      //DO OPERATIONS
+      int i = 0;      
+      #pragma omp parallel for private(i)
+      for(i=0; i<CHUNK_SIZE; i += 16){
+         unsigned char in[16], out[16];
+         int block_no = i;
+         memcpy(in, &chunk_input[block_no], 16);
+         //The next function call decrypts the PlainText with the Key using AES algorithm.
+         InvCipher(in, out);
+         memcpy(&chunk_output[block_no], out, 16);
+      }
+      
+      fwrite(chunk_output, sizeof(chunk_output), 1, fp_output);
+      
+   }
+   fclose(fp_output);
+   fclose(fp_input);
 }

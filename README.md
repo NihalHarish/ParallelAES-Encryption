@@ -1,7 +1,10 @@
 # ParallelAES-Encryption
 
-Parallel implementation Of The AES Encryption Algorithm
+Parallel implementation Of The AES Encryption Algorithm Using OpenMp
 
-This repository is a collection Parallel Implementations of the AES Encryption Algorithm
+Instructions:
 
-The repository aims to use different Parallel API's to optimize AES Encryption Algorithm
+1. Run make all
+2. There are four executables produced
+3. The format for each executable is as follows
+   exec input output
