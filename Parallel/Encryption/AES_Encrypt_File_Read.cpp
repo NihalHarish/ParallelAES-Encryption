@@ -32,10 +32,6 @@ http://en.wikipedia.org/wiki/Advanced_Encryption_Standard
 // Include stdio.h for standard input/output.
 // Used for giving output to the screen.
 #include<stdio.h>
-#include<iostream>
-#include<fstream>
-#include<stdlib.h>
-#include<time.h>
 #include<omp.h>
 #include<string.h>
 
@@ -324,19 +320,14 @@ int main(int argc, char* argv[])
 // FILE READING CAPABILITY
 
    FILE *fp_input = fopen(argv[1], "rb");
-   FILE *fp_out = fopen(argv[2], "ab");
-   clock_t start, stop;
-   double time_spent = 0.0;
-   double total_time = 0.0;
+   FILE *fp_output = fopen(argv[2], "ab");      
    char chunk_input[CHUNK_SIZE];
    char chunk_output[CHUNK_SIZE];
    // The KeyExpansion routine must be called before encryption.
    KeyExpansion();
    while(fread(chunk_input, sizeof(chunk_input), 1, fp_input) == 1){ 
       //DO OPERATIONS
-      int i = 0;
-      total_time += time_spent;
-      start = clock();
+      int i = 0;      
       #pragma omp parallel for private(i)
       for(i=0; i<CHUNK_SIZE; i += 16){
          unsigned char in[16], out[16];
@@ -346,13 +337,13 @@ int main(int argc, char* argv[])
          Cipher(in, out);
          memcpy(&chunk_output[block_no], out, 16);
       }
-      stop = clock();
-      fwrite(chunk_output, sizeof(chunk_output), 1, fp_out);
-      time_spent = (double)(stop - start)/CLOCKS_PER_SEC;
+      
+      fwrite(chunk_output, sizeof(chunk_output), 1, fp_output);
+      
    }
-   fclose(fp_out);
+   fclose(fp_output);
    fclose(fp_input);
 
-   printf("Encryption of file %s complete. \n Time Taken: %f\n", argv[1], total_time);
+   printf("Encryption of file %s complete. \n ", argv[1]);
    
 }
