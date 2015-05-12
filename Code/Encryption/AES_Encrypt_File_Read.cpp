@@ -1,42 +1,16 @@
 /*
-******************************************************************
-**       Advanced Encryption Standard implementation in C.      **
-**       By Niyaz PK                                            **
-**       E-mail: niyazlife@gmail.com                            **
-**       Downloaded from Website: www.hoozi.com                 **
-******************************************************************
-This is the source code for encryption using the latest AES algorithm.
-AES algorithm is also called Rijndael algorithm. AES algorithm is 
-recommended for non-classified by the National Institute of Standards 
-and Technology(NIST), USA. Now-a-days AES is being used for almost 
-all encryption applications all around the world.
-
-THE MAIN FEATURE OF THIS AES ENCRYPTION PROGRAM IS NOT EFFICIENCY; IT
-IS SIMPLICITY AND READABILITY. THIS SOURCE CODE IS PROVIDED FOR ALL
-TO UNDERSTAND THE AES ALGORITHM.
-
-Comments are provided as needed to understand the program. But the 
-user must read some AES documentation to understand the underlying 
-theory correctly.
-
-It is not possible to describe the complete AES algorithm in detail 
-here. For the complete description of the algorithm, point your 
-browser to:
-http://www.csrc.nist.gov/publications/fips/fips197/fips-197.pdf
-
-Find the Wikipedia page of AES at:
-http://en.wikipedia.org/wiki/Advanced_Encryption_Standard
-******************************************************************
+   This code is a Parallel Implementation of the 
+   source code available at http://www.csrc.nist.gov/publications/fips/fips197/fips-197.pdf
 */
 
-// Include stdio.h for standard input/output.
-// Used for giving output to the screen.
 #include<stdio.h>
-#include<iostream>
-#include<fstream>
-#include<stdlib.h>
 #include<omp.h>
+#include<string.h>
 
+#define KB 1024
+#define MB 1024*1024
+#define CHUNK_SIZE 256*KB
+#define KEY_LENGTH 128 
 // The number of columns comprising a state in AES. This is a constant in AES. Value=4
 #define Nb 4
 
@@ -46,10 +20,6 @@ int Nr=0;
 // The number of 32 bit words in the key. It is simply initiated to zero. The actual value is recieved in the program.
 int Nk=0;
 
-// in - it is the array that holds the plain text to be encrypted.
-// out - it is the array that holds the key for encryption.
-// state - the array that holds the intermediate results during encryption.
-unsigned char in[16], out[16], state[4][4];
 
 // The array that stores the round keys.
 unsigned char RoundKey[240];
@@ -108,7 +78,6 @@ void KeyExpansion()
 	unsigned char temp[4],k;
 	
 	// The first round key is the key itself.
-//   #pragma omp parallel for default(shared) private(i)
 	for(i=0;i<Nk;i++)
 	{
 		RoundKey[i*4]=Key[i*4];
@@ -171,12 +140,11 @@ void KeyExpansion()
 
 // This function adds the round key to state.
 // The round key is added to the state by an XOR function.
-void AddRoundKey(int round) 
+void AddRoundKey(int round, unsigned char state[][4]) 
 {
 	int i,j;
-#pragma omp parallel for default(shared) private(i,j)
 	for(i=0;i<4;i++)
-	{
+   {
 		for(j=0;j<4;j++)
 		{
 			state[j][i] ^= RoundKey[round * Nb * 4 + i * Nb + j];
@@ -186,10 +154,9 @@ void AddRoundKey(int round)
 
 // The SubBytes Function Substitutes the values in the
 // state matrix with values in an S-box.
-void SubBytes()
+void SubBytes(unsigned char state[][4])
 {
 	int i,j;
-#pragma omp parallel for default(shared) private(i,j)
 	for(i=0;i<4;i++)
 	{
 		for(j=0;j<4;j++)
@@ -203,26 +170,17 @@ void SubBytes()
 // The ShiftRows() function shifts the rows in the state to the left.
 // Each row is shifted with different offset.
 // Offset = Row number. So the first row is not shifted.
-void ShiftRows()
+void ShiftRows(unsigned char state[][4])
 {
 	unsigned char temp;
-   #pragma omp parallel private(temp)
-   {
-      #pragma omp sections
-      {
    	// Rotate first row 1 columns to left	
-         #pragma omp section
-        {
          temp=state[1][0];
          state[1][0]=state[1][1];
          state[1][1]=state[1][2];
          state[1][2]=state[1][3];
          state[1][3]=temp;
-        }  
       // Rotate second row 2 columns to left	
 
-         #pragma omp section
-         {
          temp=state[2][0];
          state[2][0]=state[2][2];
          state[2][2]=temp;
@@ -230,30 +188,23 @@ void ShiftRows()
          temp=state[2][1];
          state[2][1]=state[2][3];
          state[2][3]=temp;
-         }
       // Rotate third row 3 columns to left
 
-        #pragma omp section
-        {
          temp=state[3][0];
          state[3][0]=state[3][3];
          state[3][3]=state[3][2];
          state[3][2]=state[3][1];
          state[3][1]=temp;
-        }
-      }
-   }  
 }
 
 // xtime is a macro that finds the product of {02} and the argument to xtime modulo {1b}  
 #define xtime(x)   ((x<<1) ^ (((x>>7) & 1) * 0x1b))
 
 // MixColumns function mixes the columns of the state matrix
-void MixColumns()
+void MixColumns(unsigned char state[][4])
 {
 	int i;
 	unsigned char Tmp,Tm,t;
-#pragma omp parallel for default(shared) private(i, t, Tmp, Tm)
 	for(i=0;i<4;i++)
 	{	
 		t=state[0][i];
@@ -265,40 +216,42 @@ void MixColumns()
 	}
 }
 
+// in - is the array that holds the plain text to be encrypted.
+// out -is the array that holds the key for encryption.
+// state - the array that holds the intermediate results during encryption.
 // Cipher is the main function that encrypts the PlainText.
-void Cipher()
+void Cipher(unsigned char *in, unsigned char *out)
 {
 	int i,j,round=0;
-
+   unsigned char state[4][4];
 	//Copy the input PlainText to state array.
-#pragma omp parallel for default(shared) private(i,j)
 	for(i=0;i<4;i++)
 	{
-		for(j=0;j<4;j++)
-		{
+		for(j=0;j<4;j++){
+		
 			state[j][i] = in[i*4 + j];
 		}
 	}
 
 	// Add the First round key to the state before starting the rounds.
-	AddRoundKey(0); 
+	AddRoundKey(0, state); 
 	
 	// There will be Nr rounds.
 	// The first Nr-1 rounds are identical.
 	// These Nr-1 rounds are executed in the loop below.
 	for(round=1;round<Nr;round++)
 	{
-		SubBytes();
-		ShiftRows();
-		MixColumns();
-		AddRoundKey(round);
+		SubBytes(state);
+		ShiftRows(state);
+		MixColumns(state);
+		AddRoundKey(round, state);
 	}
 	
 	// The last round is given below.
 	// The MixColumns function is not here in the last round.
-	SubBytes();
-	ShiftRows();
-	AddRoundKey(Nr);
+	SubBytes(state);
+	ShiftRows(state);
+	AddRoundKey(Nr, state);
 
 	// The encryption process is over.
 	// Copy the state array to output array.
@@ -310,7 +263,7 @@ void Cipher()
 		}
 	}
 }
-int main()
+int main(int argc, char* argv[])
 {
 	int i;
 
@@ -320,6 +273,7 @@ int main()
 		printf("Enter the length of Key(128, 192 or 256 only): ");
 		scanf("%d",&Nr);
 	}
+   //Nr = KEY_LENGTH;
 	
 	// Calculate Nk and Nr from the recieved value.
 	Nk = Nr / 32;
@@ -327,59 +281,41 @@ int main()
 
 
 
-// Part 1 is for demonstrative purpose. The key and plaintext are given in the program itself.
-// 	Part 1: ********************************************************
+	// The array temp_key stores the key.
+	unsigned char temp_key[32] = {0x00  ,0x01  ,0x02  ,0x03  ,0x04  ,0x05  ,0x06  ,0x07  ,0x08  ,0x09  ,0x0a  ,0x0b  ,0x0c  ,0x0d  ,0x0e  ,0x0f};
 	
-	// The array temp stores the key.
-	// The array temp2 stores the plaintext.
-	unsigned char temp[32] = {0x00  ,0x01  ,0x02  ,0x03  ,0x04  ,0x05  ,0x06  ,0x07  ,0x08  ,0x09  ,0x0a  ,0x0b  ,0x0c  ,0x0d  ,0x0e  ,0x0f};
-	unsigned char temp2[32]= {0x00  ,0x11  ,0x22  ,0x33  ,0x44  ,0x55  ,0x66  ,0x77  ,0x88  ,0x99  ,0xaa  ,0xbb  ,0xcc  ,0xdd  ,0xee  ,0xff};
-	
-	// Copy the Key and PlainText
+	// Copy the Key
 	for(i=0;i<Nk*4;i++)
-	{
-		Key[i]=temp[i];
-		in[i]=temp2[i];
-	}
+		Key[i]=temp_key[i];
 
-//	       *********************************************************
+//   ****************
+// FILE READING CAPABILITY
 
+   FILE *fp_input = fopen(argv[1], "rb");
+   FILE *fp_output = fopen(argv[2], "ab");      
+   char chunk_input[CHUNK_SIZE];
+   char chunk_output[CHUNK_SIZE];
+   // The KeyExpansion routine must be called before encryption.
+   KeyExpansion();
+   while(fread(chunk_input, sizeof(chunk_input), 1, fp_input) == 1){ 
+      //DO OPERATIONS
+      int i = 0;      
+      #pragma omp parallel for private(i)
+      for(i=0; i<CHUNK_SIZE; i += 16){
+         unsigned char in[16], out[16];
+         int block_no = i;
+         memcpy(in, &chunk_input[block_no], 16);
+         //The next function call encrypts the PlainText with the Key using AES algorithm.
+         Cipher(in, out);
+         memcpy(&chunk_output[block_no], out, 16);
+      }
+      
+      fwrite(chunk_output, sizeof(chunk_output), 1, fp_output);
+      
+   }
+   fclose(fp_output);
+   fclose(fp_input);
 
-
-
-// Uncomment Part 2 if you need to read key and plaintext from the keyboard.
-// 	Part 2: ********************************************************
-/*
-	//Clear the input buffer
-	flushall();
-
-	//Recieve the key from the user
-	printf("Enter the Key in hexadecimal: ");
-	for(i=0;i<Nk*4;i++)
-	{
-		scanf("%x",&Key[i]);
-	}
-
-	printf("Enter the PlainText in hexadecimal: ");
-	for(i=0;i<Nb*4;i++)
-	{
-		scanf("%x",&in[i]);
-	}
-*/
-// 	        ********************************************************
-
-
-	// The KeyExpansion routine must be called before encryption.
-	KeyExpansion();
-
-	// The next function call encrypts the PlainText with the Key using AES algorithm.
-	Cipher();
-
-	// Output the encrypted text.
-	printf("\nText after encryption:\n");
-	for(i=0;i<Nb*4;i++)
-	{
-		printf("%02x ",out[i]);
-	}
-	printf("\n\n");
+   printf("Encryption of file %s complete. \n ", argv[1]);
+   
 }
